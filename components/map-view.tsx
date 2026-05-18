@@ -46,8 +46,8 @@ export function MapView({
   onSelect,
 }: {
   places: MapPlace[]
-  activeId: number
-  onSelect: (id: number) => void
+  activeId: string
+  onSelect: (id: string) => void
 }) {
   const active = places.find((p) => p.id === activeId) ?? places[0]
 

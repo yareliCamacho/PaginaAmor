@@ -1,55 +1,27 @@
+"use client"
+
 import Image from "next/image"
-import { MapPin, Heart } from "lucide-react"
+import { useState } from "react"
+import { MapPin, Pencil, Plus } from "lucide-react"
+import { MomentEditor } from "./moment-editor"
+import { photoSrc } from "@/lib/photo"
+import type { Moment } from "@/lib/types"
 
-const moments = [
-  {
-    id: 1,
-    title: "Café lento en domingo",
-    date: "12 de octubre, 2025",
-    place: "Casa, Madrid",
-    note: "Te quedaste dormida sobre mi hombro mientras leía. No quise moverme en una hora.",
-    image: "/moments/cafe.jpg",
-    aspect: "aspect-[4/5]",
-  },
-  {
-    id: 2,
-    title: "Atardecer en la Algarve",
-    date: "08 de septiembre, 2025",
-    place: "Lagos, Portugal",
-    note: "El cielo se puso de un rosa imposible. Dijiste que querías quedarte aquí para siempre.",
-    image: "/moments/beach.jpg",
-    aspect: "aspect-[3/4]",
-  },
-  {
-    id: 3,
-    title: "Picnic improvisado",
-    date: "21 de julio, 2025",
-    place: "Parque del Retiro",
-    note: "Trajiste el queso, yo el vino. Olvidamos el sacacorchos. Lo abrimos con un zapato.",
-    image: "/moments/picnic.jpg",
-    aspect: "aspect-[4/3]",
-  },
-  {
-    id: 4,
-    title: "La canción que era nuestra",
-    date: "14 de junio, 2025",
-    place: "Razzmatazz, Barcelona",
-    note: "La tocaron en directo. No me solté de tu mano en toda la noche.",
-    image: "/moments/concert.jpg",
-    aspect: "aspect-[1/1]",
-  },
-  {
-    id: 5,
-    title: "Amanecer a 2.300 metros",
-    date: "03 de mayo, 2025",
-    place: "Sierra de Gredos",
-    note: "Subimos a oscuras. Llegamos justo a tiempo. Me dijiste te amo y el sol salió.",
-    image: "/moments/mountain.jpg",
-    aspect: "aspect-[3/4]",
-  },
-]
+const ASPECTS = ["aspect-[4/5]", "aspect-[3/4]", "aspect-[4/3]", "aspect-[1/1]"]
 
-export function MomentsTimeline() {
+function formatDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00")
+  return d.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  })
+}
+
+export function MomentsTimeline({ moments }: { moments: Moment[] }) {
+  const [editing, setEditing] = useState<Moment | null>(null)
+  const [creating, setCreating] = useState(false)
+
   return (
     <section id="momentos" className="border-t border-border bg-card">
       <div className="mx-auto max-w-7xl px-5 py-16 md:px-8 md:py-24">
@@ -65,83 +37,130 @@ export function MomentsTimeline() {
               Los momentos que <em className="italic text-primary">no quiero olvidar.</em>
             </h2>
           </div>
-          <div className="flex items-center gap-3">
-            <button className="rounded-full border border-foreground/20 px-4 py-2 text-xs uppercase tracking-wider text-foreground hover:bg-foreground hover:text-background">
-              Todos
-            </button>
-            <button className="rounded-full border border-border px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground">
-              Este año
-            </button>
-            <button className="rounded-full border border-border px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground">
-              Favoritos
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-12 grid grid-cols-1 gap-x-8 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
-          {moments.map((m, i) => (
-            <article
-              key={m.id}
-              className={`group flex flex-col ${
-                i === 1 ? "lg:mt-16" : i === 2 ? "lg:mt-8" : i === 4 ? "lg:mt-12" : ""
-              }`}
-            >
-              <div
-                className={`relative ${m.aspect} overflow-hidden rounded-xl bg-secondary`}
-              >
-                <Image
-                  src={m.image}
-                  alt={m.title}
-                  fill
-                  className="object-cover transition-transform duration-500 group-hover:scale-105"
-                  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                />
-                <button
-                  type="button"
-                  aria-label="Marcar como favorito"
-                  className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-background/85 backdrop-blur transition-colors hover:bg-background"
-                >
-                  <Heart className="h-4 w-4 text-primary" fill={i % 2 === 0 ? "currentColor" : "none"} />
-                </button>
-              </div>
-              <div className="mt-5">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                  {m.date}
-                </p>
-                <h3
-                  className="mt-2 font-serif text-2xl leading-tight text-foreground"
-                  style={{ fontVariationSettings: '"opsz" 144' }}
-                >
-                  {m.title}
-                </h3>
-                <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <MapPin className="h-3 w-3" />
-                  {m.place}
-                </p>
-                <p className="mt-3 text-pretty text-sm leading-relaxed text-foreground/80">
-                  {m.note}
-                </p>
-              </div>
-            </article>
-          ))}
-
-          {/* Add new moment card */}
           <button
             type="button"
-            className="group flex aspect-[4/5] flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-background/50 p-8 text-center transition-colors hover:border-accent hover:bg-secondary lg:mt-4"
+            onClick={() => setCreating(true)}
+            className="inline-flex items-center gap-2 self-start rounded-full bg-foreground px-5 py-3 text-xs uppercase tracking-wider text-background hover:bg-foreground/90 md:self-auto"
           >
-            <span className="font-serif text-5xl text-muted-foreground transition-colors group-hover:text-accent">
-              +
-            </span>
-            <span className="mt-3 text-sm font-medium text-foreground">
-              Guardar un nuevo momento
-            </span>
-            <span className="mt-1 text-xs text-muted-foreground">
-              Foto, fecha y un par de palabras
-            </span>
+            <Plus className="h-3.5 w-3.5" />
+            Guardar momento
           </button>
         </div>
+
+        {moments.length === 0 ? (
+          <EmptyMoments onCreate={() => setCreating(true)} />
+        ) : (
+          <div className="mt-12 grid grid-cols-1 gap-x-8 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
+            {moments.map((m, i) => {
+              const src = photoSrc(m.photo_pathname)
+              const aspect = ASPECTS[i % ASPECTS.length]
+              return (
+                <article
+                  key={m.id}
+                  className={`group flex flex-col ${
+                    i % 3 === 1 ? "lg:mt-16" : i % 3 === 2 ? "lg:mt-8" : ""
+                  }`}
+                >
+                  <div className={`relative ${aspect} overflow-hidden rounded-xl bg-secondary`}>
+                    {src ? (
+                      <Image
+                        src={src}
+                        alt={m.title}
+                        fill
+                        className="object-cover transition-transform duration-500 group-hover:scale-105"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                        Sin foto
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      aria-label="Editar momento"
+                      onClick={() => setEditing(m)}
+                      className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-background/85 backdrop-blur transition-colors hover:bg-background"
+                    >
+                      <Pencil className="h-4 w-4 text-foreground" />
+                    </button>
+                  </div>
+                  <div className="mt-5">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                      {formatDate(m.occurred_on)}
+                    </p>
+                    <h3
+                      className="mt-2 font-serif text-2xl leading-tight text-foreground"
+                      style={{ fontVariationSettings: '"opsz" 144' }}
+                    >
+                      {m.title}
+                    </h3>
+                    {m.location && (
+                      <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <MapPin className="h-3 w-3" />
+                        {m.location}
+                      </p>
+                    )}
+                    {m.note && (
+                      <p className="mt-3 text-pretty text-sm leading-relaxed text-foreground/80">
+                        {m.note}
+                      </p>
+                    )}
+                  </div>
+                </article>
+              )
+            })}
+
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="group flex aspect-[4/5] flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-background/50 p-8 text-center transition-colors hover:border-accent hover:bg-secondary"
+            >
+              <span className="font-serif text-5xl text-muted-foreground transition-colors group-hover:text-accent">
+                +
+              </span>
+              <span className="mt-3 text-sm font-medium text-foreground">
+                Guardar un nuevo momento
+              </span>
+              <span className="mt-1 text-xs text-muted-foreground">
+                Foto, fecha y un par de palabras
+              </span>
+            </button>
+          </div>
+        )}
       </div>
+
+      {creating && (
+        <MomentEditor open onClose={() => setCreating(false)} moment={null} />
+      )}
+      {editing && (
+        <MomentEditor
+          open
+          onClose={() => setEditing(null)}
+          moment={editing}
+          key={editing.id}
+        />
+      )}
     </section>
+  )
+}
+
+function EmptyMoments({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="mt-12 rounded-2xl border-2 border-dashed border-border bg-background/50 p-12 text-center">
+      <p className="font-serif text-2xl text-foreground">
+        Aún no hay recuerdos guardados.
+      </p>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Empieza por el primer momento que no quieras olvidar.
+      </p>
+      <button
+        type="button"
+        onClick={onCreate}
+        className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm text-primary-foreground"
+      >
+        <Plus className="h-4 w-4" />
+        Guardar el primero
+      </button>
+    </div>
   )
 }

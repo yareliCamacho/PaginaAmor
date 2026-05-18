@@ -2,8 +2,11 @@
 
 import dynamic from "next/dynamic"
 import Image from "next/image"
-import { useState } from "react"
-import { MapPin, Calendar } from "lucide-react"
+import { useMemo, useState } from "react"
+import { MapPin, Calendar, Pencil } from "lucide-react"
+import { MomentEditor } from "./moment-editor"
+import { photoSrc } from "@/lib/photo"
+import type { Moment } from "@/lib/types"
 
 const MapView = dynamic(() => import("./map-view").then((m) => m.MapView), {
   ssr: false,
@@ -15,68 +18,58 @@ const MapView = dynamic(() => import("./map-view").then((m) => m.MapView), {
 })
 
 export type MapPlace = {
-  id: number
+  id: string
   name: string
   city: string
   date: string
   coords: [number, number]
-  image: string
+  image: string | null
 }
 
-export const PLACES: MapPlace[] = [
-  {
-    id: 1,
-    name: "Nuestro café favorito",
-    city: "Madrid, España",
-    date: "12 oct 2025",
-    coords: [40.4168, -3.7038],
-    image: "/moments/cafe.jpg",
-  },
-  {
-    id: 2,
-    name: "Atardecer en la Algarve",
-    city: "Lagos, Portugal",
-    date: "08 sep 2025",
-    coords: [37.1028, -8.6735],
-    image: "/moments/beach.jpg",
-  },
-  {
-    id: 3,
-    name: "Picnic en el Retiro",
-    city: "Madrid, España",
-    date: "21 jul 2025",
-    coords: [40.4153, -3.6844],
-    image: "/moments/picnic.jpg",
-  },
-  {
-    id: 4,
-    name: "Concierto inolvidable",
-    city: "Barcelona, España",
-    date: "14 jun 2025",
-    coords: [41.3984, 2.1909],
-    image: "/moments/concert.jpg",
-  },
-  {
-    id: 5,
-    name: "Amanecer en la sierra",
-    city: "Gredos, España",
-    date: "03 may 2025",
-    coords: [40.2521, -5.1364],
-    image: "/moments/mountain.jpg",
-  },
-  {
-    id: 6,
-    name: "Donde nos conocimos",
-    city: "París, Francia",
-    date: "19 abr 2022",
-    coords: [48.8566, 2.3522],
-    image: "/moments/hero.jpg",
-  },
-]
+function shortDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00")
+  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" })
+}
 
-export function MemoriesMap() {
-  const [activeId, setActiveId] = useState<number>(PLACES[0].id)
-  const active = PLACES.find((p) => p.id === activeId) ?? PLACES[0]
+function countryFromLocation(loc: string | null): string {
+  if (!loc) return ""
+  const parts = loc.split(",").map((s) => s.trim())
+  return parts[parts.length - 1] ?? ""
+}
+
+export function MemoriesMap({ moments }: { moments: Moment[] }) {
+  const placed = useMemo(
+    () => moments.filter((m): m is Moment & { lat: number; lng: number } => m.lat != null && m.lng != null),
+    [moments],
+  )
+
+  const places = useMemo<MapPlace[]>(
+    () =>
+      placed.map((m) => ({
+        id: m.id,
+        name: m.title,
+        city: m.location ?? "Sin ubicación",
+        date: shortDate(m.occurred_on),
+        coords: [m.lat, m.lng],
+        image: photoSrc(m.photo_pathname),
+      })),
+    [placed],
+  )
+
+  const countries = useMemo(() => {
+    const set = new Set<string>()
+    for (const m of placed) {
+      const c = countryFromLocation(m.location)
+      if (c) set.add(c)
+    }
+    return set.size
+  }, [placed])
+
+  const [activeId, setActiveId] = useState<string | null>(places[0]?.id ?? null)
+  const active = places.find((p) => p.id === activeId) ?? places[0] ?? null
+  const activeMoment = active ? placed.find((m) => m.id === active.id) ?? null : null
+
+  const [editing, setEditing] = useState<Moment | null>(null)
 
   return (
     <section id="mapa" className="border-t border-border">
@@ -94,106 +87,140 @@ export function MemoriesMap() {
             </h2>
           </div>
           <p className="text-pretty text-sm leading-relaxed text-muted-foreground md:col-span-5">
-            Cada chincheta es un día, una foto y una historia. Mueve el mapa, abre un
-            recuerdo y vuelve allí cuando quieras.
+            Cada chincheta es un día, una foto y una historia. Toca un recuerdo para verlo
+            o edítalo para cambiar su ubicación.
           </p>
         </div>
 
-        <div className="mt-10 grid gap-6 lg:grid-cols-12">
-          {/* Map */}
-          <div className="relative h-[420px] overflow-hidden rounded-2xl border border-border bg-secondary md:h-[560px] lg:col-span-8">
-            <MapView
-              places={PLACES}
-              activeId={activeId}
-              onSelect={(id) => setActiveId(id)}
-            />
-            <div className="pointer-events-none absolute left-4 top-4 rounded-full bg-background/85 px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-foreground backdrop-blur">
-              {PLACES.length} lugares · 4 países
-            </div>
+        {places.length === 0 ? (
+          <div className="mt-10 rounded-2xl border-2 border-dashed border-border bg-card p-12 text-center">
+            <p className="font-serif text-2xl text-foreground">
+              Aún no hay lugares en el mapa.
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Edita un momento y fija su ubicación para que aparezca aquí.
+            </p>
           </div>
+        ) : (
+          <div className="mt-10 grid gap-6 lg:grid-cols-12">
+            <div className="relative h-[420px] overflow-hidden rounded-2xl border border-border bg-secondary md:h-[560px] lg:col-span-8">
+              <MapView
+                places={places}
+                activeId={active?.id ?? places[0].id}
+                onSelect={(id) => setActiveId(id)}
+              />
+              <div className="pointer-events-none absolute left-4 top-4 rounded-full bg-background/85 px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-foreground backdrop-blur">
+                {places.length} lugares
+                {countries > 0 && ` · ${countries} ${countries === 1 ? "país" : "países"}`}
+              </div>
+            </div>
 
-          {/* List */}
-          <div className="lg:col-span-4">
-            <div className="rounded-2xl border border-border bg-card p-2">
-              <ul className="max-h-[560px] divide-y divide-border overflow-y-auto">
-                {PLACES.map((p) => {
-                  const isActive = p.id === activeId
-                  return (
-                    <li key={p.id}>
+            <div className="lg:col-span-4">
+              <div className="rounded-2xl border border-border bg-card p-2">
+                <ul className="max-h-[560px] divide-y divide-border overflow-y-auto">
+                  {places.map((p) => {
+                    const isActive = p.id === active?.id
+                    return (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onClick={() => setActiveId(p.id)}
+                          className={`flex w-full items-center gap-4 rounded-xl p-3 text-left transition-colors ${
+                            isActive ? "bg-secondary" : "hover:bg-secondary/60"
+                          }`}
+                        >
+                          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-secondary">
+                            {p.image && (
+                              <Image
+                                src={p.image}
+                                alt={p.name}
+                                fill
+                                className="object-cover"
+                                sizes="64px"
+                              />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="truncate font-serif text-base text-foreground"
+                              style={{ fontVariationSettings: '"opsz" 144' }}
+                            >
+                              {p.name}
+                            </p>
+                            <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                              <MapPin className="h-3 w-3" />
+                              {p.city}
+                            </p>
+                          </div>
+                          <span className="hidden text-[10px] uppercase tracking-wider text-muted-foreground sm:inline">
+                            {p.date}
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+
+              {active && (
+                <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
+                  <div className="relative aspect-[16/10] bg-secondary">
+                    {active.image && (
+                      <Image
+                        src={active.image}
+                        alt={active.name}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 1024px) 100vw, 33vw"
+                      />
+                    )}
+                  </div>
+                  <div className="p-5">
+                    <h3
+                      className="font-serif text-2xl text-foreground"
+                      style={{ fontVariationSettings: '"opsz" 144' }}
+                    >
+                      {active.name}
+                    </h3>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {active.city}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {active.date}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm text-foreground/80">
+                      {`${active.coords[0].toFixed(4)}°, ${active.coords[1].toFixed(4)}°`}
+                    </p>
+                    {activeMoment && (
                       <button
                         type="button"
-                        onClick={() => setActiveId(p.id)}
-                        className={`flex w-full items-center gap-4 rounded-xl p-3 text-left transition-colors ${
-                          isActive ? "bg-secondary" : "hover:bg-secondary/60"
-                        }`}
+                        onClick={() => setEditing(activeMoment)}
+                        className="mt-4 inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs uppercase tracking-wider text-foreground hover:bg-secondary"
                       >
-                        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg">
-                          <Image
-                            src={p.image}
-                            alt={p.name}
-                            fill
-                            className="object-cover"
-                            sizes="64px"
-                          />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className="truncate font-serif text-base text-foreground"
-                            style={{ fontVariationSettings: '"opsz" 144' }}
-                          >
-                            {p.name}
-                          </p>
-                          <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <MapPin className="h-3 w-3" />
-                            {p.city}
-                          </p>
-                        </div>
-                        <span className="hidden text-[10px] uppercase tracking-wider text-muted-foreground sm:inline">
-                          {p.date}
-                        </span>
+                        <Pencil className="h-3 w-3" />
+                        Editar este lugar
                       </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-
-            {/* Active card */}
-            <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
-              <div className="relative aspect-[16/10]">
-                <Image
-                  src={active.image}
-                  alt={active.name}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 1024px) 100vw, 33vw"
-                />
-              </div>
-              <div className="p-5">
-                <h3
-                  className="font-serif text-2xl text-foreground"
-                  style={{ fontVariationSettings: '"opsz" 144' }}
-                >
-                  {active.name}
-                </h3>
-                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin className="h-3 w-3" />
-                    {active.city}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Calendar className="h-3 w-3" />
-                    {active.date}
-                  </span>
+                    )}
+                  </div>
                 </div>
-                <p className="mt-3 text-sm text-foreground/80">
-                  {`${active.coords[0].toFixed(4)}°, ${active.coords[1].toFixed(4)}°`}
-                </p>
-              </div>
+              )}
             </div>
           </div>
-        </div>
+        )}
       </div>
+
+      {editing && (
+        <MomentEditor
+          open
+          onClose={() => setEditing(null)}
+          moment={editing}
+          key={editing.id}
+        />
+      )}
     </section>
   )
 }
